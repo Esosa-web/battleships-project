@@ -12,6 +12,11 @@ let currentShipIndex = 0;
 let currentShipOrientation = 'horizontal';
 let gameOver = false;
 
+// AI variables
+let lastHit = null;
+let hitStack = [];
+let huntMode = false;
+
 // Create the game boards
 function createGameBoards() {
     const player1Board = document.getElementById('player1Board');
@@ -33,13 +38,7 @@ function createGameBoards() {
 
 // Place ships randomly for computer
 function placeShipsRandomly() {
-    player2Ships = placeShipsForPlayer(2);
-    startManualPlacement();
-    updateShipStatus();
-}
-
-function placeShipsForPlayer(player) {
-    const ships = {};
+    player2Ships = {};
     for (let i = 0; i < shipSizes.length; i++) {
         const size = shipSizes[i];
         let placed = false;
@@ -48,22 +47,15 @@ function placeShipsForPlayer(player) {
             const startRow = Math.floor(Math.random() * boardSize);
             const startCol = Math.floor(Math.random() * boardSize);
             
-            if (canPlaceShip(Object.values(ships).flat(), startRow, startCol, size, isHorizontal)) {
+            if (canPlaceShip(Object.values(player2Ships).flat(), startRow, startCol, size, isHorizontal)) {
                 const newShip = placeShip(startRow, startCol, size, isHorizontal);
-                ships[getShipName(size)] = newShip;
+                player2Ships[getShipName(size, i)] = newShip;
                 placed = true;
-
-                // Visualize ships on player 1's board
-                if (player === 1) {
-                    newShip.forEach(pos => {
-                        const cell = document.getElementById(`p1-${pos}`);
-                        cell.classList.add('ship');
-                    });
-                }
             }
         }
     }
-    return ships;
+    startManualPlacement();
+    updateShipStatus();
 }
 
 function canPlaceShip(existingShips, row, col, size, isHorizontal) {
@@ -95,13 +87,14 @@ function placeShip(row, col, size, isHorizontal) {
 
 // Handle cell click event
 function handleCellClick(event) {
-    if (currentPlayer !== 1 || gameOver) return;
+    if (gameOver || currentPlayer !== 1) return; // Only allow clicks when it's the player's turn and game is not over
 
     const cellId = parseInt(event.target.id.split('-')[1]);
     let shipHit = null;
     for (const [shipName, positions] of Object.entries(player2Ships)) {
         if (positions.includes(cellId)) {
             shipHit = shipName;
+            player2Ships[shipName] = positions.filter(pos => pos !== cellId);
             break;
         }
     }
@@ -109,42 +102,42 @@ function handleCellClick(event) {
     if (shipHit) {
         event.target.classList.add('hit');
         player1Hits++;
-        player2Ships[shipHit] = player2Ships[shipHit].filter(pos => pos !== cellId);
         if (player2Ships[shipHit].length === 0) {
-            updateMessage(`You sunk the computer's ${shipHit}!`);
+            updateMessage(`You sunk the enemy's ${shipHit}!`);
             updateShipStatus();
-            setTimeout(() => {
-                if (!checkWin(1)) {
-                    updateMessage("Your turn");
-                }
-            }, 2000);
         } else {
             updateMessage("Hit! Your turn again.");
         }
+        if (checkWin(1)) return;
     } else {
         event.target.classList.add('miss');
-        updateMessage("Miss!");
         currentPlayer = 2;
+        updateMessage("Miss! Computer's turn");
         setTimeout(computerTurn, 1000);
     }
     event.target.removeEventListener('click', handleCellClick);
 }
 
-// Computer's turn
+// Improved Computer's turn with hunt and target strategy
 function computerTurn() {
     if (gameOver) return;
 
     let cellId;
-    do {
-        cellId = Math.floor(Math.random() * (boardSize * boardSize));
-    } while (document.getElementById(`p1-${cellId}`).classList.contains('hit') || 
-             document.getElementById(`p1-${cellId}`).classList.contains('miss'));
+    if (huntMode && hitStack.length > 0) {
+        cellId = hitStack.pop();
+    } else {
+        do {
+            cellId = Math.floor(Math.random() * (boardSize * boardSize));
+        } while (document.getElementById(`p1-${cellId}`).classList.contains('hit') || 
+                 document.getElementById(`p1-${cellId}`).classList.contains('miss'));
+    }
 
     const cell = document.getElementById(`p1-${cellId}`);
     let shipHit = null;
     for (const [shipName, positions] of Object.entries(player1Ships)) {
         if (positions.includes(cellId)) {
             shipHit = shipName;
+            player1Ships[shipName] = positions.filter(pos => pos !== cellId);
             break;
         }
     }
@@ -152,36 +145,54 @@ function computerTurn() {
     if (shipHit) {
         cell.classList.add('hit');
         player2Hits++;
-        player1Ships[shipHit] = player1Ships[shipHit].filter(pos => pos !== cellId);
+        lastHit = cellId;
+        huntMode = true;
+        addAdjacentCells(cellId);
         if (player1Ships[shipHit].length === 0) {
-            updateMessage(`The computer sunk your ${shipHit}!`);
+            updateMessage(`Computer sunk your ${shipHit}!`);
             updateShipStatus();
-            setTimeout(() => {
-                if (!checkWin(2)) {
-                    updateMessage("The computer gets another turn.");
-                    setTimeout(computerTurn, 1000);
-                }
-            }, 2000);
         } else {
-            updateMessage("The computer hit your ship! It gets another turn.");
-            setTimeout(computerTurn, 1000);
+            updateMessage("Computer hit! Computer's turn again.");
         }
+        if (checkWin(2)) return;
+        setTimeout(computerTurn, 1000);
     } else {
         cell.classList.add('miss');
-        updateMessage("The computer missed!");
-        setTimeout(() => {
-            currentPlayer = 1;
-            updateMessage("Your turn");
-        }, 1000);
+        if (hitStack.length === 0) {
+            huntMode = false;
+            lastHit = null;
+        }
+        currentPlayer = 1;
+        updateMessage("Computer missed! Your turn");
+    }
+}
+
+function addAdjacentCells(cellId) {
+    const row = Math.floor(cellId / boardSize);
+    const col = cellId % boardSize;
+    const adjacentCells = [
+        [row - 1, col],
+        [row + 1, col],
+        [row, col - 1],
+        [row, col + 1]
+    ];
+
+    for (const [adjRow, adjCol] of adjacentCells) {
+        if (adjRow >= 0 && adjRow < boardSize && adjCol >= 0 && adjCol < boardSize) {
+            const adjCellId = adjRow * boardSize + adjCol;
+            const adjCell = document.getElementById(`p1-${adjCellId}`);
+            if (!adjCell.classList.contains('hit') && !adjCell.classList.contains('miss')) {
+                hitStack.push(adjCellId);
+            }
+        }
     }
 }
 
 // Check if a player has won
 function checkWin(player) {
-    if ((player === 1 && Object.values(player2Ships).every(ship => ship.length === 0)) || 
-        (player === 2 && Object.values(player1Ships).every(ship => ship.length === 0))) {
-        const winMessage = player === 1 ? "Congratulations! You win!" : "The computer wins!";
-        updateMessage(winMessage);
+    if ((player === 1 && player1Hits === Object.values(player2Ships).flat().length) || 
+        (player === 2 && player2Hits === Object.values(player1Ships).flat().length)) {
+        updateMessage(`Player ${player} wins!`);
         document.getElementById('startGame').disabled = false;
         gameOver = true;
         return true;
@@ -211,8 +222,12 @@ function resetGame() {
     currentPlayer = 1;
     gameOver = false;
 
+    // Reset AI variables
+    lastHit = null;
+    hitStack = [];
+    huntMode = false;
+
     placeShipsRandomly();
-    updateMessage("Place your ships");
 }
 
 // Manual ship placement functions
@@ -220,7 +235,7 @@ function startManualPlacement() {
     placingShips = true;
     currentShipIndex = 0;
     addManualPlacementListeners();
-    updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex])} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
+    updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex], currentShipIndex)} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
 }
 
 function addManualPlacementListeners() {
@@ -242,18 +257,15 @@ function highlightShipPlacement(event) {
     
     removeHighlight();
 
+    const shipCells = getShipCells(row, col, size, currentShipOrientation === 'horizontal');
     if (canPlaceShip(Object.values(player1Ships).flat(), row, col, size, currentShipOrientation === 'horizontal')) {
-        const shipCells = getShipCells(row, col, size, currentShipOrientation === 'horizontal');
         shipCells.forEach(id => {
-            const cell = document.getElementById(`p1-${id}`);
-            cell.classList.add('ship-preview');
+            document.getElementById(`p1-${id}`).classList.add('ship-preview');
         });
     } else {
-        const shipCells = getShipCells(row, col, size, currentShipOrientation === 'horizontal');
         shipCells.forEach(id => {
-            const cell = document.getElementById(`p1-${id}`);
-            if (cell) {
-                cell.classList.add('invalid-placement');
+            if (id < boardSize * boardSize) {
+                document.getElementById(`p1-${id}`).classList.add('invalid-placement');
             }
         });
     }
@@ -274,16 +286,16 @@ function placeShipManually(event) {
     
     if (canPlaceShip(Object.values(player1Ships).flat(), row, col, size, currentShipOrientation === 'horizontal')) {
         const newShip = placeShip(row, col, size, currentShipOrientation === 'horizontal');
-        player1Ships[getShipName(size)] = newShip;
+        player1Ships[getShipName(size, currentShipIndex)] = newShip;
         newShip.forEach(pos => {
-            document.getElementById(`p1-${pos}`).classList.add('ship');
+            const cell = document.getElementById(`p1-${pos}`);
+            cell.classList.remove('ship-preview');
+            cell.classList.add('ship');
         });
-        
-        removeHighlight();
         
         currentShipIndex++;
         if (currentShipIndex < shipSizes.length) {
-            updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex])} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
+            updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex], currentShipIndex)} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
         } else {
             finishManualPlacement();
         }
@@ -293,14 +305,20 @@ function placeShipManually(event) {
 function rotateShip(event) {
     if (event.key.toLowerCase() === 'r') {
         currentShipOrientation = currentShipOrientation === 'horizontal' ? 'vertical' : 'horizontal';
-        removeHighlight();
+        const hoveredCell = document.querySelector('.ship-preview, .invalid-placement');
+        if (hoveredCell) {
+            highlightShipPlacement({ target: hoveredCell });
+        }
     }
 }
 
 function finishManualPlacement() {
     placingShips = false;
     removeManualPlacementListeners();
-    updateMessage("Your turn");
+    updateMessage("All ships placed. Game starting!");
+    setTimeout(() => {
+        updateMessage("Your turn");
+    }, 2000);
     document.getElementById('startGame').disabled = false;
     updateShipStatus();
 }
@@ -315,14 +333,14 @@ function removeManualPlacementListeners() {
     document.removeEventListener('keydown', rotateShip);
 }
 
-function getShipName(size) {
+function getShipName(size, index) {
     const shipNames = {
         5: 'Carrier',
         4: 'Battleship',
-        3: 'Cruiser/Submarine',
+        3: ['Cruiser', 'Submarine'],
         2: 'Destroyer'
     };
-    return shipNames[size];
+    return Array.isArray(shipNames[size]) ? shipNames[size][index - 2] : shipNames[size];
 }
 
 function getShipCells(row, col, size, isHorizontal) {
