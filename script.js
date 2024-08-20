@@ -10,6 +10,7 @@ const shipSizes = [5, 4, 3, 3, 2]; // Carrier, Battleship, Cruiser, Submarine, D
 let placingShips = false;
 let currentShipIndex = 0;
 let currentShipOrientation = 'horizontal';
+let gameOver = false;
 
 // Create the game boards
 function createGameBoards() {
@@ -94,7 +95,7 @@ function placeShip(row, col, size, isHorizontal) {
 
 // Handle cell click event
 function handleCellClick(event) {
-    if (currentPlayer !== 1) return;
+    if (currentPlayer !== 1 || gameOver) return;
 
     const cellId = parseInt(event.target.id.split('-')[1]);
     let shipHit = null;
@@ -131,6 +132,8 @@ function handleCellClick(event) {
 
 // Computer's turn
 function computerTurn() {
+    if (gameOver) return;
+
     let cellId;
     do {
         cellId = Math.floor(Math.random() * (boardSize * boardSize));
@@ -180,6 +183,7 @@ function checkWin(player) {
         const winMessage = player === 1 ? "Congratulations! You win!" : "The computer wins!";
         updateMessage(winMessage);
         document.getElementById('startGame').disabled = false;
+        gameOver = true;
         return true;
     }
     return false;
@@ -205,6 +209,7 @@ function resetGame() {
     player1Hits = 0;
     player2Hits = 0;
     currentPlayer = 1;
+    gameOver = false;
 
     placeShipsRandomly();
     updateMessage("Place your ships");
