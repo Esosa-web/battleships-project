@@ -30,10 +30,11 @@ function createGameBoards() {
     }
 }
 
-// Place ships randomly for player 2
+// Place ships randomly for computer
 function placeShipsRandomly() {
     player2Ships = placeShipsForPlayer(2);
     startManualPlacement();
+    updateShipStatus();
 }
 
 function placeShipsForPlayer(player) {
@@ -110,26 +111,20 @@ function handleCellClick(event) {
         player2Ships[shipHit] = player2Ships[shipHit].filter(pos => pos !== cellId);
         if (player2Ships[shipHit].length === 0) {
             updateMessage(`You sunk the computer's ${shipHit}!`);
+            updateShipStatus();
             setTimeout(() => {
                 if (!checkWin(1)) {
-                    currentPlayer = 2;
-                    computerTurn();
+                    updateMessage("Your turn");
                 }
-            }, 2000); // Delay for 2 seconds after sinking a ship
+            }, 2000);
         } else {
-            updateMessage("Hit!");
-            setTimeout(() => {
-                currentPlayer = 2;
-                computerTurn();
-            }, 1000);
+            updateMessage("Hit! Your turn again.");
         }
     } else {
         event.target.classList.add('miss');
         updateMessage("Miss!");
-        setTimeout(() => {
-            currentPlayer = 2;
-            computerTurn();
-        }, 1000);
+        currentPlayer = 2;
+        setTimeout(computerTurn, 1000);
     }
     event.target.removeEventListener('click', handleCellClick);
 }
@@ -157,18 +152,16 @@ function computerTurn() {
         player1Ships[shipHit] = player1Ships[shipHit].filter(pos => pos !== cellId);
         if (player1Ships[shipHit].length === 0) {
             updateMessage(`The computer sunk your ${shipHit}!`);
+            updateShipStatus();
             setTimeout(() => {
                 if (!checkWin(2)) {
-                    currentPlayer = 1;
-                    updateMessage("Your turn");
+                    updateMessage("The computer gets another turn.");
+                    setTimeout(computerTurn, 1000);
                 }
-            }, 2000); // Delay for 2 seconds after sinking a ship
+            }, 2000);
         } else {
-            updateMessage("The computer hit your ship!");
-            setTimeout(() => {
-                currentPlayer = 1;
-                updateMessage("Your turn");
-            }, 1000);
+            updateMessage("The computer hit your ship! It gets another turn.");
+            setTimeout(computerTurn, 1000);
         }
     } else {
         cell.classList.add('miss');
@@ -182,19 +175,11 @@ function computerTurn() {
 
 // Check if a player has won
 function checkWin(player) {
-    const allShipsSunk = (player === 1) 
-        ? Object.values(player2Ships).every(ship => ship.length === 0)
-        : Object.values(player1Ships).every(ship => ship.length === 0);
-
-    if (allShipsSunk) {
+    if ((player === 1 && Object.values(player2Ships).every(ship => ship.length === 0)) || 
+        (player === 2 && Object.values(player1Ships).every(ship => ship.length === 0))) {
         const winMessage = player === 1 ? "Congratulations! You win!" : "The computer wins!";
         updateMessage(winMessage);
         document.getElementById('startGame').disabled = false;
-        // Disable further clicks on the opponent's board
-        const opponentBoard = (player === 1) ? 'player2Board' : 'player1Board';
-        document.querySelectorAll(`#${opponentBoard} .cell`).forEach(cell => {
-            cell.removeEventListener('click', handleCellClick);
-        });
         return true;
     }
     return false;
@@ -221,16 +206,16 @@ function resetGame() {
     player2Hits = 0;
     currentPlayer = 1;
 
-    player2Ships = placeShipsForPlayer(2);
-    startManualPlacement();
+    placeShipsRandomly();
+    updateMessage("Place your ships");
 }
 
 // Manual ship placement functions
 function startManualPlacement() {
     placingShips = true;
     currentShipIndex = 0;
-    updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex])} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
     addManualPlacementListeners();
+    updateMessage(`Place your ${getShipName(shipSizes[currentShipIndex])} (size: ${shipSizes[currentShipIndex]}). Press R to rotate.`);
 }
 
 function addManualPlacementListeners() {
@@ -250,7 +235,7 @@ function highlightShipPlacement(event) {
     const col = cellId % boardSize;
     const size = shipSizes[currentShipIndex];
     
-    removeHighlight(); // Remove any existing highlights
+    removeHighlight();
 
     if (canPlaceShip(Object.values(player1Ships).flat(), row, col, size, currentShipOrientation === 'horizontal')) {
         const shipCells = getShipCells(row, col, size, currentShipOrientation === 'horizontal');
@@ -259,7 +244,6 @@ function highlightShipPlacement(event) {
             cell.classList.add('ship-preview');
         });
     } else {
-        // Add invalid placement highlight
         const shipCells = getShipCells(row, col, size, currentShipOrientation === 'horizontal');
         shipCells.forEach(id => {
             const cell = document.getElementById(`p1-${id}`);
@@ -290,7 +274,7 @@ function placeShipManually(event) {
             document.getElementById(`p1-${pos}`).classList.add('ship');
         });
         
-        removeHighlight(); // Remove the preview highlight
+        removeHighlight();
         
         currentShipIndex++;
         if (currentShipIndex < shipSizes.length) {
@@ -312,7 +296,8 @@ function finishManualPlacement() {
     placingShips = false;
     removeManualPlacementListeners();
     updateMessage("Your turn");
-    document.getElementById('startGame').disabled = true;
+    document.getElementById('startGame').disabled = false;
+    updateShipStatus();
 }
 
 function removeManualPlacementListeners() {
@@ -345,6 +330,34 @@ function getShipCells(row, col, size, isHorizontal) {
         }
     }
     return cells;
+}
+
+function updateShipStatus() {
+    const player1ShipStatus = document.getElementById('player1Ships');
+    const player2ShipStatus = document.getElementById('player2Ships');
+    
+    player1ShipStatus.innerHTML = '';
+    player2ShipStatus.innerHTML = '';
+    
+    for (const [shipName, positions] of Object.entries(player1Ships)) {
+        const shipIcon = document.createElement('div');
+        shipIcon.className = 'ship-icon';
+        shipIcon.title = shipName;
+        if (positions.length === 0) {
+            shipIcon.classList.add('sunk');
+        }
+        player1ShipStatus.appendChild(shipIcon);
+    }
+    
+    for (const [shipName, positions] of Object.entries(player2Ships)) {
+        const shipIcon = document.createElement('div');
+        shipIcon.className = 'ship-icon';
+        shipIcon.title = shipName;
+        if (positions.length === 0) {
+            shipIcon.classList.add('sunk');
+        }
+        player2ShipStatus.appendChild(shipIcon);
+    }
 }
 
 // Initialize the game
