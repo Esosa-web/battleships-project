@@ -10,20 +10,28 @@
 <body>
     <div class="container">
         <h1>Battleship</h1>
-        <div class="game-controls">
-            <button id="startGame" class="btn">Start New Game</button>
-            <div id="message" class="message"></div>
+        <div id="gameSetup">
+            <button id="singlePlayerBtn" class="btn">Single Player</button>
+            <button id="twoPlayerBtn" class="btn">Two Players</button>
         </div>
-        <div class="game-boards">
-            <div class="board-container">
-                <h2>Your Fleet</h2>
-                <div id="player1Board" class="board"></div>
-                <div id="player1Ships" class="ship-status"></div>
+        <div id="gameArea" style="display: none;">
+            <div class="game-controls">
+                <button id="startGame" class="btn">Start New Game</button>
+                <div id="message" class="message"></div>
             </div>
-            <div class="board-container">
-                <h2>Enemy Waters</h2>
-                <div id="player2Board" class="board"></div>
-                <div id="player2Ships" class="ship-status"></div>
+            <div class="game-boards">
+                <div class="board-container">
+                    <h2 id="player1Title">Player 1</h2>
+                    <div id="player1Board" class="board"></div>
+                    <div id="player1Ships" class="ship-status"></div>
+                    <button id="revealPlayer1Ships" class="btn reveal-btn">Reveal Player 1 Ships</button>
+                </div>
+                <div class="board-container">
+                    <h2 id="player2Title">Enemy Waters</h2>
+                    <div id="player2Board" class="board"></div>
+                    <div id="player2Ships" class="ship-status"></div>
+                    <button id="revealPlayer2Ships" class="btn reveal-btn">Reveal Player 2 Ships</button>
+                </div>
             </div>
         </div>
     </div>
