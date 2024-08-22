@@ -15,6 +15,12 @@ let isSinglePlayer = true;
 let setupPlayer = 1;
 let gameStarted = false;
 
+// AI variables
+let lastHit = null;
+let hitStack = [];
+const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+let currentDirection = 0;
+
 // Create the game boards
 function createGameBoards() {
     const player1Board = document.getElementById('player1Board');
@@ -154,10 +160,14 @@ function computerTurn() {
     if (gameOver) return;
 
     let cellId;
-    do {
-        cellId = Math.floor(Math.random() * (boardSize * boardSize));
-    } while (document.getElementById(`p1-${cellId}`).classList.contains('hit') || 
-             document.getElementById(`p1-${cellId}`).classList.contains('miss'));
+    if (lastHit) {
+        cellId = getSmartMove();
+    } else {
+        do {
+            cellId = Math.floor(Math.random() * (boardSize * boardSize));
+        } while (document.getElementById(`p1-${cellId}`).classList.contains('hit') || 
+                 document.getElementById(`p1-${cellId}`).classList.contains('miss'));
+    }
 
     let shipHit = null;
     for (const [shipName, positions] of Object.entries(player1Ships)) {
@@ -175,8 +185,16 @@ function computerTurn() {
         if (player1Ships[shipHit].length === 0) {
             updateMessage(`Computer sunk your ${shipHit}!`);
             updateShipStatus();
+            lastHit = null;
+            hitStack = [];
+            currentDirection = 0;
         } else {
             updateMessage("Computer hit!");
+            if (!lastHit) {
+                lastHit = cellId;
+            } else {
+                hitStack.push(cellId);
+            }
         }
         
         if (checkWin(2)) {
@@ -186,9 +204,47 @@ function computerTurn() {
         setTimeout(computerTurn, 1000);
     } else {
         updateMessage("Computer missed! Your turn");
+        if (lastHit && hitStack.length === 0) {
+            currentDirection = (currentDirection + 1) % 4;
+        }
         currentPlayer = 1;
         addClickListeners();
     }
+}
+
+function getSmartMove() {
+    let row, col;
+    if (hitStack.length > 0) {
+        const lastHitId = hitStack[hitStack.length - 1];
+        row = Math.floor(lastHitId / boardSize);
+        col = lastHitId % boardSize;
+    } else {
+        row = Math.floor(lastHit / boardSize);
+        col = lastHit % boardSize;
+    }
+
+    const [dx, dy] = directions[currentDirection];
+    let newRow = row + dx;
+    let newCol = col + dy;
+    let cellId = newRow * boardSize + newCol;
+
+    if (newRow < 0 || newRow >= boardSize || newCol < 0 || newCol >= boardSize || 
+        document.getElementById(`p1-${cellId}`).classList.contains('hit') || 
+        document.getElementById(`p1-${cellId}`).classList.contains('miss')) {
+        if (hitStack.length > 0) {
+            hitStack.pop();
+            return getSmartMove();
+        } else {
+            currentDirection = (currentDirection + 1) % 4;
+            if (currentDirection === 0) {
+                lastHit = null;
+                return Math.floor(Math.random() * (boardSize * boardSize));
+            }
+            return getSmartMove();
+        }
+    }
+
+    return cellId;
 }
 
 // Check if a player has won
@@ -218,6 +274,9 @@ function resetGame() {
     setupPlayer = 1;
     gameOver = false;
     gameStarted = false;
+    lastHit = null;
+    hitStack = [];
+    currentDirection = 0;
 
     if (isSinglePlayer) {
         player2Ships = placeShipsRandomly(2);
@@ -508,4 +567,4 @@ document.getElementById('revealPlayer1Ships').addEventListener('click', () => re
 document.getElementById('revealPlayer2Ships').addEventListener('click', () => revealShips(2));
 
 // Call this function to set up the initial game state
-createGameBoards()
+createGameBoards();
